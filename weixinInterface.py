@@ -14,19 +14,50 @@ import urllib
 import random
 import json
 
+import pylibmc as memcache
+
 import sys
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-def youdao_translate(q):
+
+def choose_lang(word = 'EN'):
+    flag = 0
+    if word == '日' or word == 'jp' or word == 'ja':
+        flag = 1
+        word = 'ja'
+    elif word == '英' or word == 'en' or word == 'EN':
+        flag = 1
+        word == 'EN'
+    elif word == '韩' or word == 'ko' :
+        flag = 1
+        word == 'ko'
+    elif word == '法' or  word == 'fr':
+        flag = 1
+        word = 'fr'
+    elif word == '俄' or word == 'ru':
+        flag = 1
+        word = 'ru'
+    elif word == '葡萄牙' or word == 'pt':
+        flag = 1
+        word = 'pt'
+    elif word == '西班牙' or word == 'es' :
+        flag = 1
+        word = 'es'
+    else:
+        flag = 0
+        word = 'EN'
+    return  word , flag
+
+def youdao_translate(q, to_Lang = 'EN' ):
     appKey = '091e7e55b4abf0b9'
     secretKey = 'Kug4XT8Zv11q5baczuc9PLDfWFwcIvlI'
 
     httpClient = None
     myurl = '/api'
 
-    fromLang = 'EN'
-    toLang = 'zh-CHS'
+    toLang = to_Lang
+    fromLang = 'zh-CHS'
     salt = random.randint(1, 65536)
 
     sign = appKey+q+str(salt)+secretKey
@@ -49,8 +80,8 @@ def youdao_translate(q):
             httpClient.close()
 
 
-def youdao(word):
-    fanyi = youdao_translate(word) 
+def youdao(word , to_Lang = 'EN' ):
+    fanyi = youdao_translate(word , to_Lang = to_Lang) 
     fanyi = json.loads(fanyi, encoding='utf-8')
 
     if fanyi['errorCode'] == u'0':
@@ -62,10 +93,10 @@ def youdao(word):
             if 'us-phonetic' in fanyi['basic']:
                 prounc = prounc +  u'美式发音：%s\n'%(fanyi['basic']['us-phonetic'])
                 
-            trans = u'%s:\n%s\n基本翻译:\n%s\n网络释义：\n%s'%(fanyi['query'],''.join(fanyi['translation']),' '.join(fanyi['basic']['explains']),''.join([i+' ; ' for i in fanyi['web'][0]['value'] ]))
+            trans = u'%s:\n%s\n基本翻译:\n%s\n网络释义：\n%s'%(word,''.join(fanyi['translation']),' '.join(fanyi['basic']['explains']),''.join([i+' ; ' for i in fanyi['web'][0]['value'] ]))
             return  prounc + trans
         else:
-            trans =u'%s:\n基本翻译:%s\n'%(fanyi['query'],''.join(fanyi['translation']))
+            trans =u'%s:\n基本翻译:%s\n'%(word,''.join(fanyi['translation']))
             return trans
         
     elif fanyi['errorCode'] == u'103':
@@ -87,6 +118,8 @@ language_list =\
 '| 葡萄牙文| pt          \n'+\
 '| 西班牙文| es          \n'+\
 '_______________________\n' 
+
+language_dir = {'ja':'日文' ,'EN':'英文','ja':'日文','ko':'韩文','fr':'法文','ru':'俄文','pt':'葡萄牙文' ,'es' : '西班牙文'  }
 
 class WeixinInterface:
 
@@ -124,40 +157,68 @@ class WeixinInterface:
         fromUser=xml.find("FromUserName").text
         toUser=xml.find("ToUserName").text
 
+        mc = memcache.Client()
+        # mc = memcache.Client()
+        change_language = 0
+
+        language_chosen = mc.get( fromUser+'_language_chosen'  )
+        mc.set(fromUser+'_language_chosen' , language_chosen)
+
+        end_hour = time.localtime( time.time() ).tm_hour
+        end_min = time.localtime( time.time() ).tm_min
+        end_sec = time.localtime( time.time() ).tm_sec
+
         if msgType == 'text':
             replayText_list = [ ]
             pic_list = [ 'https://github.com/Eacaen/WeChatPY/blob/master/language.png']
             content=xml.find("Content").text
             if content == 'help':
                 replayText = u'''1.输入语言代码进入中文互译（默认英语）\n2.输入m随机来首音乐听，建议在wifi下听\n'''
-                # replayText_list.append(replayText)
-
-                # return self.render.reply_picture(fromUser,toUser,int(time.time()) , pic_list[0])
-                # return self.render.reply_pictxt(fromUser,toUser,int(time.time()),replayText_list , pic_list , 1)
                 return self.render.reply_text(fromUser,toUser,int(time.time()),replayText + language_list)
             
             if content == 'm':
                 music_list =[
                 [u'http://music.163.com/#/song?id=27534134', u'老司机带带我', u'云南山歌']
                 ]
-
                 musicTitle = music_list[0][1]
                 musicDes = music_list[0][2]
                 musicURL = music_list[0][0]
                 return self.render.reply_music(fromUser,toUser,int(time.time()) ,musicTitle,musicDes,musicURL)
 
+            if content in language_dir.keys() :
+                language_chosen , change_language = choose_lang(content)
+                mc.set(fromUser+'_language_chosen' ,language_chosen )
 
-        if msgType == "event":
-            mscontent = xml.find("Event").text
-            if mscontent == "subscribe":
-                replayText = u'''欢迎关注本微信， 输入help查看帮助文档'''
+            if change_language == 1:
+                change_language = 0
+
+                mc.set(fromUser+'_TIME_S' , '1')
+                start_hour = time.localtime( time.time() ).tm_hour
+                start_min = time.localtime( time.time() ).tm_min
+                start_sec = time.localtime( time.time() ).tm_sec
+
+                mc.set(fromUser + '_start_min' , start_min )
+
+                replayText = u'进入<' + language_dir[language_chosen] + u'>翻译环境\n' +\
+                str(start_hour)+':'+str(start_min)+':'+str(start_sec)+'\n' + \
+                u'\n输入 EXIT 退出翻译 ; 2分钟自动退出\n'
                 return self.render.reply_text(fromUser,toUser,int(time.time()),replayText)
-            if mscontent == "unsubscribe":
-                replayText = u' see you '
-                return self.render.reply_event(fromUser,toUser,int(time.time()),replayText)
-    
+
+        if language_chosen != 'EN' and mc.get(fromUser+'_TIME_S'):
+            if content == 'EXIT' or  end_min - int ( mc.get(fromUser + '_start_min' ) ) > 2 :
+                replayText = u'退出< '+ language_dir[language_chosen] + u' >翻译环境\n' +\
+                str(end_hour)+':'+str(end_min)+':'+str(end_sec)+'\n' 
+                language_chosen = 'EN'
+                mc.set(fromUser+'_language_chosen' ,language_chosen )
+
+                mc.delete(fromUser+'_TIME_S')
+
+                return self.render.reply_text(fromUser,toUser,int(time.time()),replayText)
+
         if type(content).__name__ == "unicode":
             content = content.encode('UTF-8')
-        Nword = youdao(content)        
+        
+        language_chosen = mc.get( fromUser+'_language_chosen'  )
+        #默认英语环境
+        Nword = youdao(content , to_Lang = language_chosen ) 
         return self.render.reply_text(fromUser,toUser,int(time.time()),Nword)
- 
