@@ -75,7 +75,18 @@ def youdao(word):
     else:
         return u'对不起，您输入的单词%s无法翻译,请检查拼写'% word
 
-
+language_list =\
+'_______________________\n' + \
+'| 语言        | 代码     \n' +\
+'| 中文        | zh-CHS \n'+\
+'| 日文        | ja          \n'+\
+'| 英文        | EN        \n'+\
+'| 韩文        | ko         \n'+\
+'| 法文        | fr           \n'+\
+'| 俄文        | ru         \n'+\
+'| 葡萄牙文| pt          \n'+\
+'| 西班牙文| es          \n'+\
+'_______________________\n' 
 
 class WeixinInterface:
 
@@ -115,12 +126,15 @@ class WeixinInterface:
 
         if msgType == 'text':
             replayText_list = [ ]
+            pic_list = [ 'https://github.com/Eacaen/WeChatPY/blob/master/language.png']
             content=xml.find("Content").text
             if content == 'help':
-                replayText = u'''1.输入中文或者英文返回对应的翻译\n2.输入m随机来首音乐听，建议在wifi下听\n'''
-                replayText_list.append(replayText)
-                return self.render.reply_pictxt(fromUser,toUser,int(time.time()),replayText_list , , 1)
-                # return self.render.reply_text(fromUser,toUser,int(time.time()),replayText)
+                replayText = u'''1.输入语言代码进入中文互译（默认英语）\n2.输入m随机来首音乐听，建议在wifi下听\n'''
+                # replayText_list.append(replayText)
+
+                # return self.render.reply_picture(fromUser,toUser,int(time.time()) , pic_list[0])
+                # return self.render.reply_pictxt(fromUser,toUser,int(time.time()),replayText_list , pic_list , 1)
+                return self.render.reply_text(fromUser,toUser,int(time.time()),replayText + language_list)
             
             if content == 'm':
                 music_list =[
